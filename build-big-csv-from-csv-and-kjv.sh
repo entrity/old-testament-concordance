@@ -14,6 +14,7 @@ WORD_NO="H${1:-519}"
 
 INTERLINEAR_HEBREW_BIBLE_CSV=OpenHebrewBible-master/007-BHS-8-layer-interlinear/BHSA-8-layer-interlinear.csv
 KJV_CSV=kjv.csv
+KJV_MAPPED_TO_BHS_CSV=OpenHebrewBible-master/008-BHS-mapping-KJV/KJV-OT-mapped-to-BHS.csv
 
 to_tsv() { csvformat -d , -D $'\t'; }
 
@@ -38,17 +39,26 @@ build_header_row() {
 
 get_kjv() {
 	local kjv_ref
-	kjv_ref=$(xlate "${1}" "${2}" "${3}") # book, chapter, verse
+	kjv_ref=$(xlate "$1" "$2" "$3") # book, chapter, verse
 	csvgrep --no-header-row --columns a --regex "^${kjv_ref}$" "$KJV_CSV" \
 	| sed -E -e 1d -e 's/\s+/ /g'
 }
 
+quick_get_kjv() {
+	sed -n "${1}p" "$KJV_MAPPED_TO_BHS_CSV" | csvcut --tabs -c 5 \
+	| grep -P "[^〉]+〈${WORD_NO}＝[^〉]+〉" --color=always \
+	| sed -E -e 's/〈[^〉]+〉//g'
+}
+
 build_data_row() {
-	<<<"${csv_line}" grep -oP '｜\d+｜\d+｜\d+' | sed 's/｜/ /g' | {
-		read -r book chapter verse
-		get_kjv "$book" "$chapter" "$verse"
+	<<<"${csv_line}" grep -oP '〔\d+｜\d+｜\d+｜\d+〕' | sed -E 's/[^0-9]/	/g' | {
+		IFS=$'\t' read -r verse_id book chapter verse
+		# >&2 echo " ${verse_id}... ${book}... ${chapter}... ${verse}..."
+		xlate "${book}" "${chapter}" "${verse}"
+		echo -n ','
+		quick_get_kjv "$verse_id" | sed -E 's/\t+/ /g' | csvformat --tabs -D ,
 	} | nix_newlines
-	echo -ne ","
+	echo -n ','
 	echo "${csv_line}"
 }
 
