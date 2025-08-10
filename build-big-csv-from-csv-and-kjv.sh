@@ -5,7 +5,9 @@ IFS=$'\n' read -r -d '' -a OT_BOOKS < ot-books.txt
 >&2 echo "OT_BOOKS=(${#OT_BOOKS[@]})"
 # >&2 printf '%s\n' "${OT_BOOKS[@]}"
 
-set -euo pipefail
+if [[ $BASH_SOURCE == $0 ]]; then
+	set -euo pipefail
+fi
 
 # Strong's word number for Hebrew word, e.g. 519
 WORD_NO="H${1:-519}"
@@ -76,10 +78,12 @@ build_csv() {
 	>&2 echo "wrote to ${outfile}"
 }
 
-{
-	get_instances_from_hebrew_bible | wc -l | nix_newlines
-	echo " instances of word in old testament..."
-} >&2
-# buld_hebrew_words_regex
-build_csv
+if [[ $BASH_SOURCE == $0 ]]; then
+	{
+		get_instances_from_hebrew_bible | wc -l | nix_newlines
+		echo " instances of word in old testament..."
+	} >&2
+	# buld_hebrew_words_regex
+	build_csv
+fi
 >&2 echo DONE
