@@ -47,7 +47,7 @@ get_kjv() {
 quick_get_kjv() {
 	sed -n "${1}p" "$KJV_MAPPED_TO_BHS_CSV" | csvcut --tabs -c 5 \
 	| grep -P "[^〉]+〈${WORD_NO}＝[^〉]+〉" --color=always \
-	| sed -E -e 's/〈[^〉]+〉//g'
+	| sed -E -e 's/〈[^〉]+〉//g' -e 's/\x1b\[([0-9]+;)*31m/_@@@_/g' -e 's/\x1b\[m/@___@/g' -e 's/\x1b\[K//g'
 }
 
 build_data_row() {
@@ -57,8 +57,8 @@ build_data_row() {
 		xlate "${book}" "${chapter}" "${verse}"
 		echo -n ','
 		quick_get_kjv "$verse_id" | sed -E 's/\t+/ /g' | csvformat --tabs -D ,
+		echo -n ','
 	} | nix_newlines
-	echo -n ','
 	echo "${csv_line}"
 }
 
@@ -75,25 +75,41 @@ debug_count() {
 	} >&2
 }
 
+ods_formatting() {
+	[[ -d tmpdir ]] && rm -r tmpdir
+	soffice --headless --convert-to ods --outdir . "${WORD_NO}.csv"
+	unzip "${WORD_NO}.ods" -d tmpdir
+	cd tmpdir
+	sed -E -i "content.xml" \
+	-e 's|</office:automatic-styles>|<style:style style:name="T1" style:family="text"><style:text-properties style:text-position="super 58%"/></style:style><style:style style:name="T2" style:family="text"><style:text-properties fo:color="#c9211e"/></style:style><style:style style:name="T3" style:family="text"><style:text-properties fo:font-style="italic" style:font-style-asian="italic" style:font-style-complex="italic"/></style:style></office:automatic-styles>|' \
+	-e 's|&lt;sup&gt;|<text:span text:style-name="T1">|g' \
+	-e 's|&lt;/sup&gt;|</text:span>|g' \
+	-e 's|_@@@_|<text:span text:style-name="T2">|g' \
+	-e 's|@___@|</text:span>|g' \
+	-e 's|&lt;i&gt;|<text:span text:style-name="T3">|g' \
+	-e 's|&lt;/i&gt;|</text:span>|g' \
+	-e 's|&lt;heb&gt;||g' \
+	-e 's|&lt;/heb&gt;||g'
+	zip -r "/tmp/${WORD_NO}.ods" .
+	soffice --headless --convert-to xlsx --outdir .. "/tmp/${WORD_NO}.ods"
+}
+
 build_csv() {
-	local outfile="${WORD_NO}.tsv"
+	local outfile="${WORD_NO}.csv"
 	{
 		build_header_row
 		COUNT=0
 		while IFS= read -r csv_line; do
 			build_data_row "${csv_line}"
 			debug_count
+			# break ###############
 		done < <(get_instances_from_hebrew_bible)
-	} | to_tsv > "${outfile}"
+	} > "${outfile}"
 	>&2 echo "wrote to ${outfile}"
 }
 
 if [[ $BASH_SOURCE == $0 ]]; then
-	{
-		get_instances_from_hebrew_bible | wc -l | nix_newlines
-		echo " instances of word in old testament..."
-	} >&2
-	# buld_hebrew_words_regex
 	build_csv
+	ods_formatting
 fi
 >&2 echo DONE
